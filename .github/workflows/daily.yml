@@ -1,0 +1,28 @@
+name: Daily Report
+
+on:
+  schedule:
+    - cron: "30 21 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    env:
+      NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      BMW_PAGE_ID: ${{ secrets.BMW_PAGE_ID }}
+      PORCHE_PAGE_ID: ${{ secrets.PORCHE_PAGE_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      PARENT_PAGE_ID: ${{ secrets.PARENT_PAGE_ID }}
+      AI_COMPARISONS_DATABASE_ID: ${{ secrets.AI_COMPARISONS_DATABASE_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - run: bun index.ts
