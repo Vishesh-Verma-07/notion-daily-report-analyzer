@@ -19,7 +19,7 @@ jobs:
       AI_COMPARISONS_DATABASE_ID: ${{ secrets.AI_COMPARISONS_DATABASE_ID }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
 
