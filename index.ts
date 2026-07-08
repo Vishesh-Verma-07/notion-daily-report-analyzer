@@ -1,6 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { Client } from "@notionhq/client";
 import dotenv from "dotenv";
+import { parseReportDate } from "./date";
 import { getReports } from "./fetch";
 import getPrompt from "./prompt";
 import type { ComparisonResult } from "./types";
@@ -109,37 +110,42 @@ function getTitleValue(
 
 async function getLastComparedDate() {
   const dataSourceId = await getComparisonDataSourceId();
+  let cursor: string | undefined;
+  let latestDate: string | null = null;
+  let latestTime = Number.NEGATIVE_INFINITY;
 
-  const result = await notion.dataSources.query({
-    data_source_id: dataSourceId,
-    result_type: "page",
-    page_size: 1,
-    sorts: [
-      {
-        property: "Date",
-        direction: "descending",
-      },
-    ],
-  });
+  do {
+    const result = await notion.dataSources.query({
+      data_source_id: dataSourceId,
+      result_type: "page",
+      page_size: 100,
+      start_cursor: cursor,
+    });
 
-  const latest = result.results[0];
+    for (const page of result.results) {
+      const date = getTitleValue(
+        page as { properties?: Record<string, any> },
+        "Date",
+      );
+      const time = parseReportDate(date);
 
-  if (!latest) {
-    return null;
-  }
+      if (time !== null && time > latestTime) {
+        latestDate = date;
+        latestTime = time;
+      }
+    }
 
-  const latestDate = getTitleValue(
-    latest as { properties?: Record<string, any> },
-    "Date",
-  );
-  return latestDate || null;
+    cursor = result.has_more ? (result.next_cursor ?? undefined) : undefined;
+  } while (cursor);
+
+  return latestDate;
 }
 
 function isAfterComparedDate(candidateDate: string, comparedDate: string) {
-  const candidateTime = Date.parse(candidateDate);
-  const comparedTime = Date.parse(comparedDate);
+  const candidateTime = parseReportDate(candidateDate);
+  const comparedTime = parseReportDate(comparedDate);
 
-  if (!Number.isNaN(candidateTime) && !Number.isNaN(comparedTime)) {
+  if (candidateTime !== null && comparedTime !== null) {
     return candidateTime > comparedTime;
   }
 

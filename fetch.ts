@@ -1,4 +1,5 @@
 import { Client } from "@notionhq/client";
+import { compareReportDates } from "./date";
 import type { DatedReports } from "./types";
 
 const notion = new Client({
@@ -72,7 +73,9 @@ const getReports = async (): Promise<DatedReports[]> => {
     getReportsByDate(process.env.PORCHE_PAGE_ID || ""),
   ]);
 
-  const dates = [...new Set([...bmwReports.keys(), ...porcheReports.keys()])].sort();
+  const dates = [
+    ...new Set([...bmwReports.keys(), ...porcheReports.keys()]),
+  ].sort(compareReportDates);
 
   return dates.map((date) => ({
     date,
