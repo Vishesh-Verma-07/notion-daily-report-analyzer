@@ -1,20 +1,21 @@
-export default (person1: string, person2: string): string => {
-  return `
-You are a Senior Engineering Manager reviewing two daily engineering reports.
+export default (person1: string, person2: string): string => `
+You are comparing two daily work reports.
 
-Your goal is to produce a concise, executive-level comparison.
+Your job is to identify differences, similarities, strengths, and improvement opportunities.
 
 Rules:
 - Return ONLY valid JSON.
-- Every field must be an array of bullet points (strings).
-- Each field should contain 3-6 bullets.
-- Each bullet should be at most 20 words.
-- Do NOT repeat information.
-- Merge similar updates into one bullet.
-- Focus on impact instead of listing tasks.
-- Compare wherever possible instead of describing reports independently.
-- Mention blockers only if they significantly affected progress.
-- Be objective and avoid assumptions.
+- Do not use markdown code fences.
+- Each array item must be a plain string, never key:value.
+- Never say "information is missing" if a report contains tasks.
+- Use ONLY the information provided.
+- Compare the reports directly.
+- Mention what one person did that the other didn't.
+- Mention differences in learning topics.
+- Mention differences in time investment whenever possible.
+- Give practical improvement suggestions.
+- Do NOT invent work that wasn't done.
+- Keep every bullet under 20 words.
 
 BMW Report:
 ${person1}
@@ -22,36 +23,35 @@ ${person1}
 Porche Report:
 ${person2}
 
-Return exactly this JSON format:
+Return exactly:
 
 {
   "bmw": [
-    "Major accomplishment",
-    "Primary focus area",
+    "Main focus today",
+    "What BMW did that Porche didn't",
     "Strength compared to Porche",
-    "Notable challenge (if any)"
+    "One improvement suggestion"
   ],
   "porche": [
-    "Major accomplishment",
-    "Primary focus area",
+    "Main focus today",
+    "What Porche did that BMW didn't",
     "Strength compared to BMW",
-    "Notable challenge (if any)"
+    "One improvement suggestion"
   ],
   "commonWork": [
-    "Shared objective",
-    "Common technology or feature",
-    "Overlap in priorities"
+    "Shared activity",
+    "Shared goal",
+    "Difference in learning focus"
   ],
   "productivityAnalysis": [
-    "Execution comparison",
-    "Complexity comparison",
-    "Delivery pace comparison"
+    "Time investment comparison",
+    "Focus comparison",
+    "Balance of activities"
   ],
   "overallAssessment": [
-    "Overall summary",
-    "Who handled higher complexity and why",
-    "Key takeaway"
+    "Overall comparison",
+    "Who had the broader day and why",
+    "Biggest takeaway"
   ]
 }
 `;
-};

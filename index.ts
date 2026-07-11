@@ -19,16 +19,171 @@ const notion = new Client({
 const databaseId = process.env.AI_COMPARISONS_DATABASE_ID;
 let comparisonDataSourceId: string | undefined;
 
-function parseComparisonJson(text: string): ComparisonResult {
-  const trimmed = text.trim();
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
+function extractBalancedJsonObject(text: string) {
+  let inString = false;
+  let isEscaped = false;
+  let depth = 0;
+  let start = -1;
 
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("Gemini response did not contain valid JSON.");
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
+    if (isEscaped) {
+      isEscaped = false;
+      continue;
+    }
+
+    if (char === "\\") {
+      isEscaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) {
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) {
+        start = i;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      if (depth === 0) {
+        continue;
+      }
+
+      depth -= 1;
+      if (depth === 0 && start !== -1) {
+        return text.slice(start, i + 1);
+      }
+    }
   }
 
-  const parsed = JSON.parse(trimmed.slice(start, end + 1)) as ComparisonResult;
+  return null;
+}
+
+function decodeJsonString(value: string) {
+  try {
+    return JSON.parse(`"${value}"`) as string;
+  } catch {
+    return value;
+  }
+}
+
+function parseMalformedStructuredText(text: string): ComparisonResult | null {
+  const required: Array<keyof ComparisonResult> = [
+    "bmw",
+    "porche",
+    "commonWork",
+    "productivityAnalysis",
+    "overallAssessment",
+  ];
+
+  const result: Partial<ComparisonResult> = {};
+
+  for (const key of required) {
+    const sectionMatch = text.match(
+      new RegExp(`"${key}"\\s*:\\s*\\[([\\s\\S]*?)\\]`, "i"),
+    );
+
+    if (!sectionMatch?.[1]) {
+      return null;
+    }
+
+    const body = sectionMatch[1];
+    const colonValueMatches = Array.from(
+      body.matchAll(/:\s*"((?:\\.|[^"\\])*)"/g),
+    ).map((match) => decodeJsonString(match[1] as string));
+
+    if (colonValueMatches.length > 0) {
+      result[key] = colonValueMatches;
+      continue;
+    }
+
+    const stringMatches = Array.from(body.matchAll(/"((?:\\.|[^"\\])*)"/g)).map(
+      (match) => decodeJsonString(match[1] as string),
+    );
+
+    if (stringMatches.length === 0) {
+      return null;
+    }
+
+    result[key] = stringMatches;
+  }
+
+  if (
+    required.every(
+      (key) => Array.isArray(result[key]) && (result[key]?.length ?? 0) > 0,
+    )
+  ) {
+    return result as ComparisonResult;
+  }
+
+  return null;
+}
+
+function parseComparisonJson(text: string): ComparisonResult {
+  const trimmed = text.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+
+  const candidates: string[] = [];
+  if (fenceMatch?.[1]) {
+    candidates.push(fenceMatch[1].trim());
+  }
+
+  const keyHintIndex = Math.min(
+    ...['"bmw"', '"porche"', '"commonWork"', '"overallAssessment"']
+      .map((key) => trimmed.indexOf(key))
+      .filter((index) => index >= 0),
+  );
+
+  if (Number.isFinite(keyHintIndex)) {
+    const fromKey = trimmed.slice(keyHintIndex);
+    const keyCandidate = extractBalancedJsonObject(fromKey);
+    if (keyCandidate) {
+      candidates.push(keyCandidate);
+    }
+  }
+
+  const balancedCandidate = extractBalancedJsonObject(trimmed);
+  if (balancedCandidate) {
+    candidates.push(balancedCandidate);
+  }
+
+  candidates.push(trimmed);
+
+  let parsed: any;
+  let lastError: unknown;
+
+  for (const candidate of candidates) {
+    try {
+      parsed = JSON.parse(candidate);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (!parsed) {
+    const repaired = parseMalformedStructuredText(trimmed);
+    if (repaired) {
+      return repaired;
+    }
+
+    console.error("Invalid JSON received from Gemini:");
+    console.error(trimmed);
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Gemini response did not contain valid JSON.");
+  }
 
   const required = [
     "bmw",
@@ -56,6 +211,7 @@ async function generateComparison(
   person2: string,
 ): Promise<ComparisonResult> {
   const prompt = getPrompt(person1, person2);
+  // console.log(prompt)
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",

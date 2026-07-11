@@ -7,50 +7,110 @@ const notion = new Client({
 });
 
 async function listAllChildren(blockId: string) {
-  const blocks = [];
-  let cursor: string | undefined;
+  const allBlocks: any[] = [];
 
-  do {
-    const response = await notion.blocks.children.list({
-      block_id: blockId,
-      start_cursor: cursor,
-      page_size: 100,
-    });
+  async function traverse(id: string) {
+    let cursor: string | undefined;
 
-    blocks.push(...response.results);
-    cursor = response.has_more
-      ? (response.next_cursor ?? undefined)
-      : undefined;
-  } while (cursor);
+    do {
+      const response = await notion.blocks.children.list({
+        block_id: id,
+        start_cursor: cursor,
+        page_size: 100,
+      });
 
-  return blocks;
+      for (const block of response.results) {
+        allBlocks.push(block);
+
+        
+        if ("has_children" in block && block.has_children) {
+          await traverse(block.id);
+        }
+      }
+
+      cursor = response.has_more ? response.next_cursor ?? undefined : undefined;
+    } while (cursor);
+  }
+
+  await traverse(blockId);
+
+  return allBlocks;
 }
 
 function blockToText(block: any): string {
-  if ("paragraph" in block && block.paragraph?.rich_text) {
-    return block.paragraph.rich_text
-      .map((item: any) => item.plain_text)
-      .join("");
-  }
+  const richText = block[block.type]?.rich_text;
 
-  return "";
+  if (!richText) return "";
+
+  const text = richText
+    .map((item: any) => item.plain_text)
+    .join("")
+    .trim();
+
+  if (!text) return "";
+
+  switch (block.type) {
+    case "paragraph":
+      return text;
+
+    case "numbered_list_item":
+      return `1. ${text}`;
+
+    case "bulleted_list_item":
+      return `- ${text}`;
+
+    case "to_do":
+      return `- [ ] ${text}`;
+
+    default:
+      return text;
+  }
 }
 
 type ReportMap = Map<string, string>;
 
 function extractReportsByDate(text: string): ReportMap {
-  const reports: ReportMap = new Map();
-  const matches = [...text.matchAll(/Date:\s*([^\n\r]+)([\s\S]*?)(?=Date:|$)/gi)];
+  const reports = new Map<string, string>();
 
-  for (const match of matches) {
-    const rawDate = match[1]?.trim();
-    const body = match[2]?.trim() ?? "";
+  let currentDate: string | null = null;
+  let currentLines: string[] = [];
 
-    if (!rawDate) {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (const line of lines) {
+    const match = line.match(/^Date:-?\s*(.+)$/i);
+
+    if (match) {
+      // Save previous report
+      if (currentDate) {
+        reports.set(
+          currentDate,
+          `Date:- ${currentDate}\n${currentLines.join("\n")}`
+        );
+      }
+
+      if(!match[1])
+        continue;
+
+      currentDate = match[1].trim();
+      currentLines = [];
       continue;
     }
 
-    reports.set(rawDate, `Date: ${rawDate}${body ? `\n${body}` : ""}`);
+    if (currentDate) {
+      currentLines.push(line);
+    }
+  }
+
+  // Save last report
+  if (currentDate) {
+    reports.set(
+      currentDate,
+      `Date:- ${currentDate}\n${currentLines.join("\n")}`
+    );
   }
 
   return reports;
@@ -63,6 +123,15 @@ async function getReportsByDate(pageId: string): Promise<ReportMap> {
 
   const blocks = await listAllChildren(pageId);
   const text = blocks.map(blockToText).filter(Boolean).join("\n");
+
+  // console.log(blocks);
+  for (const block of blocks) {
+    if (!('type' in block)) continue; 
+
+    console.log("TYPE:", block.type);
+    console.log("TEXT:", blockToText(block));
+    console.log("----------------");
+  }
 
   return extractReportsByDate(text);
 }
