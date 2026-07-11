@@ -123,16 +123,6 @@ async function getReportsByDate(pageId: string): Promise<ReportMap> {
 
   const blocks = await listAllChildren(pageId);
   const text = blocks.map(blockToText).filter(Boolean).join("\n");
-
-  // console.log(blocks);
-  for (const block of blocks) {
-    if (!('type' in block)) continue; 
-
-    console.log("TYPE:", block.type);
-    console.log("TEXT:", blockToText(block));
-    console.log("----------------");
-  }
-
   return extractReportsByDate(text);
 }
 
